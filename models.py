@@ -1,7 +1,7 @@
 import torch
     
 class ResBlock(torch.nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, stride=1):
         """
         Initializes a new Residual Block object
         
@@ -13,25 +13,31 @@ class ResBlock(torch.nn.Module):
         """
         super(ResBlock, self).__init__()
         
-        self.conv1 = torch.nn.Conv2d(in_channels, out_channels, 3, 2, 1)
-        self.conv2 = torch.nn.Conv2d(out_channels, out_channels, 3, 1, 1)
+        self.conv1 = torch.nn.Conv2d(in_channels, out_channels, 3, stride=1, padding=1)
+        self.downsample = None
+        
+        if stride > 1:
+            self.downsample = torch.nn.Conv2d(in_channels, out_channels, 1, stride=2)
+            
+        self.conv2 = torch.nn.Conv2d(out_channels, out_channels, 3, stride=stride, padding=1)
         self.norm1 = torch.nn.BatchNorm2d(out_channels)
         self.norm2 = torch.nn.BatchNorm2d(out_channels)
-        self.downsample = torch.nn.Conv2d(in_channels, out_channels, 1, 2)
         
     def forward(self, x):
         
-        
-        residual = self.downsample(x)
+        if self.downsample:
+            residual = self.downsample(x)
+        else:
+            residual = x
        
         x = self.conv1(x)
         x = self.norm1(x)
-        x = torch.nn.functional.silu(x)
+        x = torch.nn.functional.leaky_relu(x)
         x = self.conv2(x)
         
         x = x + residual
         x = self.norm2(x)
-        x = torch.nn.functional.silu(x)
+        x = torch.nn.functional.leaky_relu(x)
         
         return x
     
@@ -42,18 +48,21 @@ class Encoder(torch.nn.Module):
         """
         super(Encoder, self).__init__()
         
-        self.conv1 = torch.nn.Conv2d(3, 32, 5, 1)
-        self.conv2 = torch.nn.Conv2d(32, 32, 3, 1)
-        self.res1 = ResBlock(32, 64)
-        self.res2 = ResBlock(64, 128)
-        self.res3 = ResBlock(128, 256)
-        self.res4 = ResBlock(256, 512)
-        self.res5 = ResBlock(512, 512)
-
-        self.meanpool1 = torch.nn.AvgPool2d(3, 2)
-        self.meanpool2 = torch.nn.AvgPool2d(3, 2)
+        self.conv1 = torch.nn.Conv2d(3, 64, 7, 2)
+        self.norm1 = torch.nn.BatchNorm2d(64)
+        self.maxpool = torch.nn.MaxPool2d(3, 2)
         
-        self.norm1 = torch.nn.BatchNorm2d(32)
+        self.res1 = ResBlock(64, 64)
+        self.res2 = ResBlock(64, 64)
+        self.res3 = ResBlock(64, 128, 2)
+        self.res4 = ResBlock(128, 128)
+        self.res5 = ResBlock(128, 256, 2)
+        self.res6 = ResBlock(256, 256)
+        self.res7 = ResBlock(256, 512, 2)
+        self.res8 = ResBlock(512, 512)
+        self.res9 = ResBlock(512, 1024, 2)
+        
+        self.avgpool = torch.nn.AvgPool2d(3, 2)
         
         #self.lin1 = torch.nn.Linear(516*4*4, 2048)
         #self.lin2 = torch.nn.Linear(2048, 512)
@@ -62,91 +71,104 @@ class Encoder(torch.nn.Module):
         
         x = self.conv1(x)
         x = self.norm1(x)
-        x = torch.nn.functional.silu(x)
-        x = self.conv2(x)
-        x = self.norm1(x)
-        x = torch.nn.functional.silu(x)
-        x = self.meanpool1(x)
-        x = self.norm1(x)
-        x = torch.nn.functional.silu(x)
+        x = torch.nn.functional.leaky_relu(x)
+        
+        x = self.maxpool(x)
         
         x = self.res1(x)
         x = self.res2(x)
         x = self.res3(x)
         x = self.res4(x)
         x = self.res5(x)
-        x = self.meanpool2(x)
+        x = self.res6(x)
+        x = self.res7(x)
+        x = self.res8(x)
+        x = self.res9(x)
+        
+        x = self.avgpool(x)
         
         x = torch.flatten(x)
-        
-        #x = self.lin1(x)
-        #x = torch.nn.functional.silu(x)
-        #x = self.lin2(x)
-        #x = torch.tanh(x)
         
         return x
  
 class Deconv(torch.nn.Module):
     """
-        Initializes a new Deconvolution (transposed convolution) object
-        
-        Args:
-            in_channels (int): the number of input features of given layer
-            out_channels (int): the number of output features of given layer
-            kernel = size of the transposed convolution kernel (window)
-            stride = size of the transposed convolution stride (step size)
-            padding = specifise the usage of the padding (supplement of the image/feature map borders)
-        """
-    def __init__(self, in_channels, out_channels, kernel=3, stride=1, padding=0):
+    Initializes a new Deconvolution (transposed convolution) object
+    
+    Args:
+        in_channels (int): the number of input features of given layer
+        out_channels (int): the number of output features of given layer
+        kernel = size of the transposed convolution kernel (window)
+        stride = size of the transposed convolution stride (step size)
+        padding = specifise the usage of the padding (supplement of the image/feature map borders)
+    """
+    def __init__(self, in_channels, out_channels, stride=1):
         super(Deconv, self).__init__()
-        
-        self.conv = torch.nn.ConvTranspose2d(in_channels, out_channels, kernel, stride, padding)
-        self.norm = torch.nn.BatchNorm2d(out_channels)
+            
+        self.deconv1 = torch.nn.ConvTranspose2d(in_channels, out_channels, 3, stride=1, padding=1)
+        self.upsample = None
+
+        if stride > 1:
+            self.upsample = torch.nn.ConvTranspose2d(in_channels, out_channels, 1, stride=2)
+            
+        self.deconv2 = torch.nn.ConvTranspose2d(out_channels, out_channels, 3, stride=stride, padding=1)
+        self.norm1 = torch.nn.BatchNorm2d(out_channels)
+        self.norm2 = torch.nn.BatchNorm2d(out_channels)
         
     def forward(self, x):
         
-        x = self.conv(x)
-        x = self.norm(x)
-        
-        return torch.nn.functional.silu(x)
+        if self.upsample:
+            residual = self.upsample(x)
+        else:
+            residual = x
        
+        x = self.deconv1(x)
+        x = self.norm1(x)
+        x = torch.nn.functional.leaky_relu(x)
+        x = self.deconv2(x)
+        x = x + residual
+        x = self.norm2(x)
+        x = torch.nn.functional.leaky_relu(x)
+        
+        return x
+
 class Decoder(torch.nn.Module):
     def __init__(self):
+        super(Decoder, self).__init__()
         """
         Initializes a new Decoder object that decodes given latent space (compressed feature representation) into image
         """
-        super(Decoder, self).__init__()
+        self.lin = torch.nn.Linear(1024, 512*4*4)
         
-        self.lin1 = torch.nn.Linear(512, 2048)
-        self.lin2 = torch.nn.Linear(2048, 516*4*4)
+        self.dconv1 = Deconv(512, 512, 2)
+        self.dconv2 = Deconv(512, 256, 2)
+        self.dconv3 = Deconv(256, 128, 2)
+        self.dconv4 = Deconv(128, 128, 2)
+        self.dconv5 = Deconv(128, 64, 2)
+        self.dconv6 = Deconv(64, 32, 2)
         
-        self.dconv0 = Deconv(516, 512, 3, 2)
-        self.dconv1 = Deconv(512, 256, 3, 2, 2)
-        self.dconv2 = Deconv(256, 128, 3, 2, 2)
-        self.dconv3 = Deconv(128, 128, 3, 2)
-        self.dconv4 = Deconv(128, 64, 2, 2)
-        self.dconv5 = Deconv(64, 64, 2, 2)
-        self.dconv6 = Deconv(64, 32, 3, 1)
-        self.dconv7 = torch.nn.ConvTranspose2d(32, 3, 3, 1)
-
+        self.tconv1 = torch.nn.ConvTranspose2d(32, 16, 12)
+        self.tconv2 = torch.nn.ConvTranspose2d(16, 16, 12)
+        self.tconv3 = torch.nn.ConvTranspose2d(16, 3, 10)
+        self.norm16 = torch.nn.BatchNorm2d(16)
+        
         
     def forward(self, x):
         
-        x = self.lin1(x)
-        x = torch.nn.functional.silu(x)
-        x = self.lin2(x)
-        x = torch.nn.functional.silu(x)
-        x = x.view(-1, 516, 4, 4)
+        x = self.lin(x)
+        x = x.view(-1, 512, 4, 4)
 
-        x = self.dconv0(x)
         x = self.dconv1(x)
         x = self.dconv2(x)
         x = self.dconv3(x)
         x = self.dconv4(x)
         x = self.dconv5(x)
         x = self.dconv6(x)
-        x = self.dconv7(x)
-  
+    
+        x = torch.relu(self.norm16(self.tconv1(x)))
+        x = torch.relu(self.norm16(self.tconv2(x)))
+        x = self.tconv3(x)
+    
         x = torch.sigmoid(x)
         
         return x
@@ -185,7 +207,7 @@ class VariationalAutoencoder(torch.nn.Module):
     def sample(self, mu, logvar):
         # given mean mu and log variance logvar, sample from distribution D(mu, logvar)
 
-        logvar = torch.clamp(logvar, -20, 20)
+        logvar = torch.clamp(logvar, -20, 20) + 0.0001 * torch.randn_like(logvar)
         variance = torch.exp(logvar)
         std = variance.sqrt()
 
@@ -194,6 +216,7 @@ class VariationalAutoencoder(torch.nn.Module):
     def forward(self, x):
         
         latent_space = self.encoder(x)
+        print(latent_space.size)
         
         mu = self.mu(latent_space)
         logvar = self.logvar(latent_space)
@@ -203,3 +226,4 @@ class VariationalAutoencoder(torch.nn.Module):
         x = self.decoder(z)
         
         return x, latent_space, mu, logvar
+    
