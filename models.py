@@ -9,7 +9,8 @@ class ResBlock(torch.nn.Module):
         
         Args:
             in_channels (int): the number of input features of given layer
-            out_channels (int): the number of output features of given layer
+            out_channels (int): the number of output features of given layer,
+                for residual block it's recommended to change channel size together with activation map size (size of conv output)
         """
         super(ResBlock, self).__init__()
         
@@ -94,24 +95,28 @@ class Encoder(torch.nn.Module):
 class Deconv(torch.nn.Module):
     """
     Initializes a new Deconvolution (transposed convolution) object
+    O = (I - 1) x stride - 2 x padding + kernel size
     
     Args:
         in_channels (int): the number of input features of given layer
-        out_channels (int): the number of output features of given layer
+        out_channels (int): the number of output features of given layer,
+            for residual block it's recommended to change channel size together with activation map size (size of conv output)
         kernel = size of the transposed convolution kernel (window)
         stride = size of the transposed convolution stride (step size)
         padding = specifise the usage of the padding (supplement of the image/feature map borders)
+        activation = wether use a activation function or not (in last layer it's recommended to not)
     """
-    def __init__(self, in_channels, out_channels, stride=1):
+    def __init__(self, in_channels, out_channels, stride=1, activation=True):
         super(Deconv, self).__init__()
             
-        self.deconv1 = torch.nn.ConvTranspose2d(in_channels, out_channels, 3, stride=1, padding=1)
+        self.deconv1 = torch.nn.ConvTranspose2d(in_channels, out_channels, 2, stride=1)
         self.upsample = None
+        self.activation = activation
 
         if stride > 1:
-            self.upsample = torch.nn.ConvTranspose2d(in_channels, out_channels, 1, stride=2)
+            self.upsample = torch.nn.ConvTranspose2d(in_channels, out_channels, 2, stride=2)
             
-        self.deconv2 = torch.nn.ConvTranspose2d(out_channels, out_channels, 3, stride=stride, padding=1)
+        self.deconv2 = torch.nn.ConvTranspose2d(out_channels, out_channels, 2, stride=stride, padding=1)
         self.norm1 = torch.nn.BatchNorm2d(out_channels)
         self.norm2 = torch.nn.BatchNorm2d(out_channels)
         
@@ -121,6 +126,7 @@ class Deconv(torch.nn.Module):
             residual = self.upsample(x)
         else:
             residual = x
+
        
         x = self.deconv1(x)
         x = self.norm1(x)
@@ -128,7 +134,9 @@ class Deconv(torch.nn.Module):
         x = self.deconv2(x)
         x = x + residual
         x = self.norm2(x)
-        x = torch.nn.functional.leaky_relu(x)
+        
+        if self.activation:
+            x = torch.nn.functional.leaky_relu(x)
         
         return x
 
@@ -138,25 +146,19 @@ class Decoder(torch.nn.Module):
         """
         Initializes a new Decoder object that decodes given latent space (compressed feature representation) into image
         """
-        self.lin = torch.nn.Linear(1024, 512*4*4)
+        self.lin = torch.nn.Linear(1024, 512*7*7)
         
         self.dconv1 = Deconv(512, 512, 2)
         self.dconv2 = Deconv(512, 256, 2)
         self.dconv3 = Deconv(256, 128, 2)
         self.dconv4 = Deconv(128, 128, 2)
         self.dconv5 = Deconv(128, 64, 2)
-        self.dconv6 = Deconv(64, 32, 2)
-        
-        self.tconv1 = torch.nn.ConvTranspose2d(32, 16, 12)
-        self.tconv2 = torch.nn.ConvTranspose2d(16, 16, 12)
-        self.tconv3 = torch.nn.ConvTranspose2d(16, 3, 10)
-        self.norm16 = torch.nn.BatchNorm2d(16)
-        
+        self.dconv6 = Deconv(64, 3, 2, activation=False)
         
     def forward(self, x):
         
         x = self.lin(x)
-        x = x.view(-1, 512, 4, 4)
+        x = x.view(-1, 512, 7, 7)
 
         x = self.dconv1(x)
         x = self.dconv2(x)
@@ -164,10 +166,6 @@ class Decoder(torch.nn.Module):
         x = self.dconv4(x)
         x = self.dconv5(x)
         x = self.dconv6(x)
-    
-        x = torch.relu(self.norm16(self.tconv1(x)))
-        x = torch.relu(self.norm16(self.tconv2(x)))
-        x = self.tconv3(x)
     
         x = torch.sigmoid(x)
         
@@ -226,4 +224,7 @@ class VariationalAutoencoder(torch.nn.Module):
         x = self.decoder(z)
         
         return x, latent_space, mu, logvar
-    
+
+img = torch.randn(1, 3 ,224, 224)
+ae = Autoencoder()
+ae(img)
