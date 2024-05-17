@@ -49,7 +49,7 @@ class Encoder(torch.nn.Module):
         """
         super(Encoder, self).__init__()
         
-        self.conv1 = torch.nn.Conv2d(3, 64, 7, 2)
+        self.conv1 = torch.nn.Conv2d(4, 64, 7, 2)
         self.norm1 = torch.nn.BatchNorm2d(64)
         self.maxpool = torch.nn.MaxPool2d(3, 2)
         
@@ -168,7 +168,7 @@ class Decoder(torch.nn.Module):
         self.dconv10 = Deconv(128, 64, 2)
         self.dconv11 = Deconv(64, 64, 1)
         self.dconv12 = Deconv(64, 64, 1)
-        self.dconv13 = Deconv(64, 3, 2, activation=False)
+        self.dconv13 = Deconv(64, 4, 2, activation=False)
         #self.dconv6 = Deconv(64, 3, 2, activation=False)
         
     def forward(self, x):
