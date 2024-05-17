@@ -57,11 +57,15 @@ class Encoder(torch.nn.Module):
         self.res2 = ResBlock(64, 64)
         self.res3 = ResBlock(64, 128, 2)
         self.res4 = ResBlock(128, 128)
-        self.res5 = ResBlock(128, 256, 2)
-        self.res6 = ResBlock(256, 256)
-        self.res7 = ResBlock(256, 512, 2)
-        self.res8 = ResBlock(512, 512)
-        self.res9 = ResBlock(512, 1024, 2)
+        self.res5 = ResBlock(128, 128)
+        self.res6 = ResBlock(128, 256, 2)
+        self.res7 = ResBlock(256, 256)
+        self.res8 = ResBlock(256, 256)
+        self.res9 = ResBlock(256, 512, 2)
+        self.res10 = ResBlock(512, 512)
+        self.res11 = ResBlock(512, 512)
+        self.res12 = ResBlock(512, 1024, 2)
+        self.res13 = ResBlock(1024, 1024, 1)
         
         self.avgpool = torch.nn.AvgPool2d(3, 2)
         
@@ -85,6 +89,10 @@ class Encoder(torch.nn.Module):
         x = self.res7(x)
         x = self.res8(x)
         x = self.res9(x)
+        x = self.res10(x)
+        x = self.res11(x)
+        x = self.res12(x)
+        x = self.res13(x)
         
         x = self.avgpool(x)
         
@@ -146,19 +154,27 @@ class Decoder(torch.nn.Module):
         """
         Initializes a new Decoder object that decodes given latent space (compressed feature representation) into image
         """
-        self.lin = torch.nn.Linear(1024, 512*7*7)
+        self.lin = torch.nn.Linear(1024, 1024*7*7)
         
-        self.dconv1 = Deconv(512, 512, 2)
-        self.dconv2 = Deconv(512, 256, 2)
-        self.dconv3 = Deconv(256, 128, 2)
-        self.dconv4 = Deconv(128, 128, 2)
-        self.dconv5 = Deconv(128, 64, 2)
-        self.dconv6 = Deconv(64, 3, 2, activation=False)
+        self.dconv1 = Deconv(1024, 512, 2)
+        self.dconv2 = Deconv(512, 512, 1)
+        self.dconv3 = Deconv(512, 512, 1)
+        self.dconv4 = Deconv(512, 256, 2)
+        self.dconv5 = Deconv(256, 256, 1)
+        self.dconv6 = Deconv(256, 256, 1)
+        self.dconv7 = Deconv(256, 128, 2)
+        self.dconv8 = Deconv(128, 128, 1)
+        self.dconv9 = Deconv(128, 128, 1)
+        self.dconv10 = Deconv(128, 64, 2)
+        self.dconv11 = Deconv(64, 64, 1)
+        self.dconv12 = Deconv(64, 64, 1)
+        self.dconv13 = Deconv(64, 3, 2, activation=False)
+        #self.dconv6 = Deconv(64, 3, 2, activation=False)
         
     def forward(self, x):
         
         x = self.lin(x)
-        x = x.view(-1, 512, 7, 7)
+        x = x.view(-1, 1024, 7, 7)
 
         x = self.dconv1(x)
         x = self.dconv2(x)
@@ -166,7 +182,14 @@ class Decoder(torch.nn.Module):
         x = self.dconv4(x)
         x = self.dconv5(x)
         x = self.dconv6(x)
-    
+        x = self.dconv7(x)
+        x = self.dconv8(x)
+        x = self.dconv9(x)
+        x = self.dconv10(x)
+        x = self.dconv11(x)
+        x = self.dconv12(x)
+        x = self.dconv13(x)
+ 
         x = torch.sigmoid(x)
         
         return x
@@ -224,7 +247,3 @@ class VariationalAutoencoder(torch.nn.Module):
         x = self.decoder(z)
         
         return x, latent_space, mu, logvar
-
-img = torch.randn(1, 3 ,224, 224)
-ae = Autoencoder()
-ae(img)
