@@ -36,7 +36,12 @@ class FaceDataset(torch.utils.data.Dataset):
     def __getitem__(self, x):
         
         x = self.paths[x]
-        image = self.transform(skimage.io.imread(x))
+        img = skimage.io.imread(x)
+        if img.shape[-1] == 4:
+            # Remove the alpha channel
+            img = img[:, :, :3]
+            
+        image = self.transform(img)
         
         '''extracting second from end entity of spitted path, last is img number, 
            second last is directory (one directory indicates one person)'''
