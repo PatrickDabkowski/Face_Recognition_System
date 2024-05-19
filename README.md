@@ -3,7 +3,8 @@ Employment of Autoencoder/Variational Autoencoder for FaceID system based on the
 
 Among tested similarity measures (such as MSE, Cosin Similarity and Pearson Correlation Coefficient) MSE shows best properties of distinguishing same identity with and without glsses as well as different identities
 
-![Database identity with glasses](graphics/me_glasses.png)
-![Database identity without glasses](graphics/me_noglasses.png)
-![Identity out of database identity with glasses](graphics/celebrity_glasses.png)
-![Identity out of database identity without glasses](graphics/celebrity_noglasses.png)
+<img src="graphics/me_glasses.png" alt="Database identity with glasses" width="300"/>
+<img src="graphics/me_noglasses.png" alt="Database identity without glasses" width="300"/>
+<img src="graphics/celebrity_glasses.png" alt="Identity out of database identity with glasses" width="300"/>
+<img src="graphics/celebrity_noglasses.png" alt="Identity out of database identity without glasses" width="300"/>
+
