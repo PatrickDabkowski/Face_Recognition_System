@@ -11,6 +11,7 @@ from kivy.uix.label import Label
 from kivy.uix.button import Button
 from kivy.uix.boxlayout import BoxLayout
 from kivy.graphics.texture import Texture
+from kivy.uix.gridlayout import GridLayout
 from kivy.graphics import Color, Rectangle
 
 from kivy.uix.image import Image
@@ -26,6 +27,8 @@ class KivyCamera(BoxLayout):
         self.face = Image()
         self.device = device
         self.mse = None
+        self.cos = None
+        self.correlation = None
         
         # set model
         self.model_path = model_path
@@ -59,6 +62,22 @@ class KivyCamera(BoxLayout):
         self.pass_fail_indicator.canvas.add(Color(*self.pass_fail_indicator_color))
         self.pass_fail_indicator.canvas.add(self.pass_fail_indicator_background)
         self.add_widget(self.pass_fail_indicator)
+        
+        # Results Table
+        self.results_layout = GridLayout(cols=2, size_hint_y=0.2)
+        self.add_widget(self.results_layout)
+        
+        self.results_layout.add_widget(Label(text="MSE:"))
+        self.mse_label = Label(text="")
+        self.results_layout.add_widget(self.mse_label)
+        
+        self.results_layout.add_widget(Label(text="Cosine Similarity:"))
+        self.cos_label = Label(text="")
+        self.results_layout.add_widget(self.cos_label)
+        
+        self.results_layout.add_widget(Label(text="Correlation:"))
+        self.correlation_label = Label(text="")
+        self.results_layout.add_widget(self.correlation_label)
 
         Clock.schedule_interval(self.update, 1.0 / fps)
 
@@ -126,14 +145,21 @@ class KivyCamera(BoxLayout):
         
         latent_vecotor = self.encoder(face)
         
-        self.mse = torch.nn.functional.mse_loss(latent_vecotor, db_latent_vecotor)
+        self.mse = torch.nn.functional.mse_loss(latent_vecotor, db_latent_vecotor).item()
         print("mse:", self.mse)
         
-        cos = torch.nn.functional.cosine_similarity(latent_vecotor, db_latent_vecotor)
-        print("cos similarity:", cos)
+        self.cos = torch.nn.functional.cosine_similarity(latent_vecotor, db_latent_vecotor).item()
+        print("cos similarity:", self.cos)
         
         latent_vecotor, db_latent_vecotor = latent_vecotor.cpu().detach().numpy(), db_latent_vecotor.cpu().detach().numpy()
-        print("correlation: ", np.corrcoef(latent_vecotor, db_latent_vecotor))
+        corr = np.corrcoef(latent_vecotor, db_latent_vecotor)
+        print("correlation: ", corr)
+        self.correlation = corr[0, 1]
+        
+        # Update the labels with new values
+        self.mse_label.text = f"{self.mse:.6f}"
+        self.cos_label.text = f"{self.cos:.6f}"
+        self.correlation_label.text = f"{self.correlation:.6f}"
         
         
 class TestApp(App):
